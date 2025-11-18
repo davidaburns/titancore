@@ -1,6 +1,5 @@
 use std::future::Future;
 use std::sync::Arc;
-use tokio::signal;
 use tokio::sync::Notify;
 
 pub struct SignalWaiter {
@@ -36,7 +35,7 @@ async fn wait_for_signal() {
     #[cfg(unix)]
     {
         use tokio::signal::unix::{SignalKind, signal};
-        let mut sigint = signal(SignalKind::interupt()).unwrap();
+        let mut sigint = signal(SignalKind::interrupt()).unwrap();
         let mut sigterm = signal(SignalKind::terminate()).unwrap();
 
         tokio::select! {
@@ -47,6 +46,13 @@ async fn wait_for_signal() {
 
     #[cfg(not(unix))]
     {
+        use tokio::signal;
         signal::ctrl_c().await.ok();
+    }
+}
+
+impl Default for SignalWaiter {
+    fn default() -> Self {
+        Self::new()
     }
 }

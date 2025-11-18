@@ -1,7 +1,6 @@
 use core::platform::SignalWaiter;
 use core::server::Server;
 use tracing::info;
-use tracing_subscriber;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
@@ -17,5 +16,5 @@ async fn main() {
         .await;
 
     info!("Cleaning up");
-    server.shutdown();
+    server.shutdown().await;
 }

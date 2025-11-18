@@ -29,13 +29,17 @@ impl Client {
     }
 }
 
-pub fn spawn_read_task(mut reader: OwnedReadHalf, tx: UnboundedSender<Vec<u8>>) -> JoinHandle<()> {
+pub fn spawn_read_task(
+    mut reader: OwnedReadHalf,
+    tx: UnboundedSender<Vec<u8>>,
+    dc_tx: UnboundedSender<usize>,
+    client_id: usize,
+) -> JoinHandle<()> {
     tokio::spawn(async move {
         let mut buffer = vec![0u8; 1500];
         loop {
             match reader.read(&mut buffer).await {
                 Ok(0) => {
-                    info!("Disconnected");
                     break;
                 }
                 Ok(n) => {
@@ -51,12 +55,15 @@ pub fn spawn_read_task(mut reader: OwnedReadHalf, tx: UnboundedSender<Vec<u8>>) 
                 }
             }
         }
+
+        let _ = dc_tx.send(client_id);
     })
 }
 
-pub fn spaw_write_task(
+pub fn spawn_write_task(
     mut writer: OwnedWriteHalf,
     mut rx: UnboundedReceiver<Vec<u8>>,
+    dc_tx: UnboundedSender<usize>,
     client_id: usize,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
@@ -65,5 +72,7 @@ pub fn spaw_write_task(
                 error!("Client {} write error: {}", client_id, e);
             }
         }
+
+        let _ = dc_tx.send(client_id);
     })
 }
