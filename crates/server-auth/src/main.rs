@@ -1,20 +1,19 @@
 use core::platform::SignalWaiter;
-use core::server::Server;
-use tracing::info;
+use core::server::run_server;
+use tracing::{error, info};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
     tracing_subscriber::fmt::init();
-
-    let mut server = Server::new();
     let waiter = SignalWaiter::new();
 
     waiter
         .wait(async {
-            server.listen("0.0.0.0", 8080).await.unwrap();
+            if let Err(e) = run_server("0.0.0.0", 8080).await {
+                error!("Error while running the server: {e}");
+            }
         })
         .await;
 
     info!("Cleaning up");
-    server.shutdown().await;
 }
