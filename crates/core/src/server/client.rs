@@ -4,7 +4,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::task::JoinHandle;
-use tracing::{error, info};
+use tracing::error;
 
 pub struct ClientHandle {
     pub tx: Sender<ClientMessage>,
@@ -24,6 +24,7 @@ impl Client {
         let mut buffer = [0u8; 1500];
         loop {
             tokio::select! {
+               // Reading bytes over the tcp stream
                result = self.reader.read(&mut buffer) => {
                    match result {
                        Ok(0) => {
@@ -41,6 +42,7 @@ impl Client {
                    }
                }
 
+               // Recieving messages over the server channel
                Some(msg) = self.rx.recv() => {
                    match msg {
                        ClientMessage::Send(bytes) => {

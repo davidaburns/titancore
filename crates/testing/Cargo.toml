@@ -1,0 +1,9 @@
+[package]
+name = "testing"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+core = {path="../../crates/core"}
+num = {version="0.4.3", features=["num-bigint"]}

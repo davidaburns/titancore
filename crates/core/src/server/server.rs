@@ -3,7 +3,7 @@ use tokio::{
     net::TcpListener,
     sync::mpsc::{self, Receiver},
 };
-use tracing::info;
+use tracing::{error, info};
 
 use crate::server::{
     ClientHandle,
@@ -14,6 +14,7 @@ use crate::server::{
 pub struct Server {
     pub clients: HashMap<SocketAddr, ClientHandle>,
     pub rx: Receiver<ServerMessage>,
+    pub running: bool,
 }
 
 impl Server {
@@ -21,41 +22,56 @@ impl Server {
         Self {
             clients: HashMap::new(),
             rx,
+            running: false,
         }
     }
 
-    async fn handle_messages(&mut self) {
+    pub async fn handle_messages(&mut self) {
         loop {
             tokio::select! {
                 Some(msg) = self.rx.recv() => {
                     match msg {
-                        ServerMessage::AddClient((addr, tx)) => {
-                            info!("Adding client: {addr}");
+                        ServerMessage::ServerAddClient((addr, tx)) => {
                             self.clients.insert(addr, tx);
                         }
                         ServerMessage::ClientDisconnected(addr) => {
                             self.client_disconnect(addr);
                         }
-                        _ => {}
                     }
                 }
             }
         }
     }
 
-    async fn shutdown(&mut self) {
-        todo!();
+    pub async fn shutdown(&mut self) {
+        info!("Server shutting down");
+        for (_, client) in self.clients.iter() {
+            if !client.handle.is_finished() {
+                client.handle.abort();
+            }
+        }
+
+        self.clients.clear();
     }
 
-    async fn cleanup_clients(&mut self) {
-        todo!();
+    pub async fn cleanup_clients(&mut self) {
+        let before = self.clients.len();
+        self.clients.retain(|_, c| !c.handle.is_finished());
+
+        let after = before - self.clients.len();
+
+        info!("Cleaned up {after} clients");
     }
 
-    async fn client_send(&self, data: &Vec<u8>) {
-        todo!();
+    pub async fn client_send(&self, addr: SocketAddr, data: Vec<u8>) {
+        if let Some(client) = self.clients.get(&addr) {
+            if let Err(e) = client.tx.send(ClientMessage::Send(data)).await {
+                error!("Error while communicating over server -> client channel: {e}");
+            }
+        }
     }
 
-    fn client_disconnect(&mut self, addr: SocketAddr) {
+    pub fn client_disconnect(&mut self, addr: SocketAddr) {
         if let Some(client) = self.clients.get(&addr) {
             if !client.handle.is_finished() {
                 client.handle.abort();
@@ -65,8 +81,12 @@ impl Server {
         }
     }
 
-    async fn broadcast(&self, addr: SocketAddr, data: &Vec<u8>) {
-        todo!();
+    pub async fn broadcast(&self, data: Vec<u8>) {
+        for (_, client) in self.clients.iter() {
+            if let Err(e) = client.tx.send(ClientMessage::Send(data.clone())).await {
+                error!("Error while broadcasting to clients: {e}");
+            }
+        }
     }
 }
 
@@ -106,7 +126,7 @@ pub async fn run_server(host: &str, port: u16) -> Result<(), Box<dyn std::error:
 
         let server_tx_clone = server_tx.clone();
         server_tx_clone
-            .send(ServerMessage::AddClient((addr, client_handle)))
+            .send(ServerMessage::ServerAddClient((addr, client_handle)))
             .await?;
     }
 }
