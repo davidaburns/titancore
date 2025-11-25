@@ -1,3 +1,5 @@
+use crate::crypto::error::InvalidPublicKeyError;
+
 #[macro_export]
 macro_rules! define_key_sized {
     ($name: ident, $size: expr) => {
@@ -24,8 +26,26 @@ macro_rules! define_key_sized {
                 Ok(Self { key })
             }
 
-            pub fn as_bytes_le(&self) -> &[u8; $size] {
-                &self.key
+            pub fn from_hex_str_be(hex_str: &str) -> Result<Self, hex::FromHexError> {
+                let mut bytes = hex::decode(hex_str)?;
+                bytes.reverse();
+
+                while bytes.len() < $size {
+                    bytes.insert(0, 0x00);
+                }
+
+                let key = <[u8; $size]>::try_from(bytes).unwrap();
+                Ok(Self { key })
+            }
+
+            pub fn as_bytes_le(&self) -> [u8; $size] {
+                self.key
+            }
+
+            pub fn as_bytes_be(&self) -> [u8; $size] {
+                let mut key_clone = self.key.clone();
+                key_clone.reverse();
+                key_clone
             }
 
             pub fn to_vec(&self) -> Vec<u8> {
@@ -44,8 +64,24 @@ macro_rules! define_key_sized {
                 hex::encode(self.key)
             }
 
-            pub(crate) fn to_bigint(&self) -> num::bigint::BigInt {
+            pub fn to_hex_str_be(&self) -> String {
+                let mut key_clone = self.key.clone();
+                key_clone.reverse();
+
+                hex::encode(key_clone)
+            }
+
+            pub fn to_bigint(&self) -> num::bigint::BigInt {
                 num::bigint::BigInt::from_bytes_le(num::bigint::Sign::Plus, &self.key)
+            }
+
+            pub fn try_from_bigint(b: num::bigint::BigInt) -> Result<Self, InvalidPublicKeyError> {
+                let mut key = [0u8; $size];
+
+                let b = b.to_bytes_le().1.to_vec();
+                key[0..b.len()].clone_from_slice(&b);
+
+                Ok(Self::from_bytes_le(&key))
             }
         }
 
@@ -118,7 +154,7 @@ macro_rules! define_byte_value {
                 self.0
             }
 
-            pub(crate) fn to_bigint(&self) -> num::bigint::BigInt {
+            pub fn to_bigint(&self) -> num::bigint::BigInt {
                 num::bigint::BigInt::from(self.0)
             }
         }
@@ -127,7 +163,9 @@ macro_rules! define_byte_value {
 
 #[cfg(test)]
 mod test {
+    use crate::crypto::error::InvalidPublicKeyError;
     use crate::{define_byte_value, define_key_constant, define_key_sized};
+
     const TEST_BYTE_VALUE: u8 = 10;
     const TEST_KEY_SIZED_SIZE: usize = 10;
     const TEST_KEY_SIZED_HEX_STR: &str = "000000000000DEADBEEF";
@@ -160,56 +198,56 @@ mod test {
 
     #[test]
     fn test_define_key_sized_from_bytes_le() {
-        let bytes = [0x00u8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04];
-        let expected = TestKeySized { key: bytes };
+        let expected = TestKeySized {
+            key: TEST_KEY_SIZED_HEX_BYTES,
+        };
 
-        let a = TestKeySized::from_bytes_le(&bytes);
+        let a = TestKeySized::from_bytes_le(&TEST_KEY_SIZED_HEX_BYTES);
         assert_eq!(expected, a);
     }
 
     #[test]
     fn test_define_key_sized_from_hex_str() {
-        let hex = "000000000000DEADBEEF";
-        let bytes = [0x00u8, 0x00, 0x00, 0x00, 0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF];
-        let expected = TestKeySized { key: bytes };
+        let expected = TestKeySized {
+            key: TEST_KEY_SIZED_HEX_BYTES,
+        };
 
-        let a = TestKeySized::from_hex_str(hex).unwrap();
+        let a = TestKeySized::from_hex_str(TEST_KEY_SIZED_HEX_STR).unwrap();
         assert_eq!(expected, a);
     }
 
     #[test]
     fn test_define_key_sized_from_hex_str_pads_bytes() {
-        let hex = "DEADBEEF";
-        let bytes = [0x00u8, 0x00, 0x00, 0x00, 0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF];
-        let expected = TestKeySized { key: bytes };
+        let expected = TestKeySized {
+            key: TEST_KEY_SIZED_HEX_BYTES,
+        };
 
-        let a = TestKeySized::from_hex_str(hex).unwrap();
+        let a = TestKeySized::from_hex_str("DEADBEEF").unwrap();
         assert_eq!(expected, a);
     }
 
     #[test]
     fn test_define_key_sized_from_hex_str_errors() {
-        let hex = "ISNOTHEX";
-        let a = TestKeySized::from_hex_str(hex);
-
+        let a = TestKeySized::from_hex_str("ISNOTHEX");
         assert!(a.is_err())
     }
 
     #[test]
     fn test_define_key_sized_to_bigint_from_bytes() {
-        let bytes = [0x00u8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04];
-        let a = TestKeySized::from_bytes_le(&bytes);
-        let expected: u128 = 18944950560362762076160;
+        let a = TestKeySized::from_bytes_le(&TEST_KEY_SIZED_HEX_BYTES);
+        let expected: u128 = 1132162999231063412178944;
 
         assert_eq!(expected.to_string(), a.to_bigint().to_string());
     }
 
     #[test]
     fn test_define_key_sized_to_bigint_from_hex_str() {
-        let hex = "00000000000001020304";
-        let a = TestKeySized::from_hex_str(hex).unwrap();
-        let expected: u128 = 18944950560362762076160;
+        let a = TestKeySized::from_hex_str(TEST_KEY_SIZED_HEX_STR).unwrap();
+        let expected: u128 = 1132162999231063412178944;
 
         assert_eq!(expected.to_string(), a.to_bigint().to_string());
     }
+
+    #[test]
+    fn test_define_key_sized_from_bigint() {}
 }

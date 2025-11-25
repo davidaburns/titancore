@@ -1,5 +1,6 @@
-mod defines;
-mod srp6;
 #[macro_use]
 mod macros;
-pub use srp6::*;
+
+pub mod defines;
+pub mod error;
+pub mod srp6;

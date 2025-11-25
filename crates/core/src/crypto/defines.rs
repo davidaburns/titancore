@@ -1,3 +1,4 @@
+use crate::crypto::error::InvalidPublicKeyError;
 use crate::{define_byte_value, define_key_constant, define_key_sized};
 
 const SESSION_KEY_SIZE: usize = 40;

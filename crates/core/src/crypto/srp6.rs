@@ -6,9 +6,16 @@ use hmac::digest::Update;
 use sha1::{Digest, Sha1};
 
 pub fn calculate_x(username: &str, password: &str, salt: Salt) -> Sha1Hash {
-    let unp = format!("{}:{}", username.to_uppercase(), password.to_uppercase());
-    let p = Sha1::new().chain(unp.as_bytes()).finalize();
-    let x = Sha1::new().chain(salt.as_bytes_le()).chain(p).finalize();
+    let p = Sha1::new()
+        .chain_update(username)
+        .chain_update(":")
+        .chain_update(password)
+        .finalize();
+
+    let x = Sha1::new()
+        .chain_update(salt.as_bytes_le())
+        .chain_update(p)
+        .finalize();
 
     Sha1Hash::from_bytes_le(&x.into())
 }
@@ -167,7 +174,7 @@ pub fn calculate_reconnect_proof(
 }
 
 fn split_key(s_key: InterimSessionKey) -> InterimSessionKey {
-    let bytes = *s_key.as_bytes_le();
+    let bytes = s_key.as_bytes_le();
     let mut slice = &bytes[..];
     while slice.len() >= 2 && slice[0] == 0x00 {
         slice = &slice[2..];
@@ -212,29 +219,97 @@ fn sha1_interleaved(s_key: InterimSessionKey) -> SessionKey {
 
 #[cfg(test)]
 mod test {
+    use crate::crypto::defines::{PasswordVerifier, PrivateKey, PublicKey, Salt, Sha1Hash};
+    use crate::crypto::srp6::{
+        calculate_password_verifier, calculate_server_public_key, calculate_u, calculate_x,
+    };
 
-    #[ignore]
     #[test]
     fn test_calculate_x() {
-        // let username = "USERNAME123";
-        // let password = "PASSWORD123";
+        let tests = include_str!("../../tests/srp6/calculate_x_salt_values.txt");
+        let username = "USERNAME123";
+        let password = "PASSWORD123";
+
+        for line in tests.lines() {
+            let mut line = line.split_whitespace();
+            let salt = Salt::from_hex_str_be(line.next().unwrap()).unwrap();
+            let expected = Sha1Hash::from_hex_str_be(line.next().unwrap()).unwrap();
+
+            let x = calculate_x(username, password, salt);
+
+            assert_eq!(expected, x);
+        }
     }
 
-    #[ignore]
     #[test]
-    fn test_calculate_u() {}
+    fn test_calculate_x_static_salts() {
+        let tests = include_str!("../../tests/srp6/calculate_x_values.txt");
+        let salt = Salt::from_hex_str_be(
+            "CAC94AF32D817BA64B13F18FDEDEF92AD4ED7EF7AB0E19E9F2AE13C828AEAF57",
+        )
+        .unwrap();
 
-    #[ignore]
+        for line in tests.lines() {
+            let mut line = line.split_whitespace();
+            let username = line.next().unwrap();
+            let password = line.next().unwrap();
+            let expected = Sha1Hash::from_hex_str_be(line.next().unwrap()).unwrap();
+
+            let x = calculate_x(username, password, salt);
+
+            assert_eq!(expected, x);
+        }
+    }
+
     #[test]
-    fn test_calculate_password_verifier() {}
+    fn test_calculate_u() {
+        let tests = include_str!("../../tests/srp6/calculate_u_values.txt");
+        for line in tests.lines() {
+            let mut line = line.split_whitespace();
+            let client_public_key = PublicKey::from_hex_str_be(line.next().unwrap()).unwrap();
+            let server_public_key = PublicKey::from_hex_str_be(line.next().unwrap()).unwrap();
+            let expected = Sha1Hash::from_hex_str_be(line.next().unwrap()).unwrap();
+
+            let u = calculate_u(client_public_key, server_public_key);
+
+            assert_eq!(expected, u);
+        }
+    }
+
+    #[test]
+    fn test_calculate_password_verifier() {
+        let tests = include_str!("../../tests/srp6/calculate_v_values.txt");
+        for line in tests.lines() {
+            let mut line = line.split_whitespace();
+            let username = line.next().unwrap();
+            let password = line.next().unwrap();
+            let salt = Salt::from_hex_str_be(line.next().unwrap()).unwrap();
+            let expected = PasswordVerifier::from_hex_str_be(line.next().unwrap()).unwrap();
+
+            let v = calculate_password_verifier(username, password, salt);
+
+            assert_eq!(expected, v);
+        }
+    }
 
     #[ignore]
     #[test]
     fn test_calculate_client_public_key() {}
 
-    #[ignore]
     #[test]
-    fn test_calculate_server_public_key() {}
+    fn test_calculate_server_public_key() {
+        let tests = include_str!("../../tests/srp6/calculate_B_values.txt");
+        for line in tests.lines() {
+            let mut line = line.split_whitespace();
+            let v = PasswordVerifier::from_hex_str_be(line.next().unwrap()).unwrap();
+            let server_private_key = PrivateKey::from_hex_str_be(line.next().unwrap()).unwrap();
+            let expected = PublicKey::from_hex_str_be(line.next().unwrap()).unwrap();
+
+            let server_public_key = calculate_server_public_key(v, server_private_key);
+
+            assert_eq!(expected, server_public_key);
+        }
+    }
 
     #[ignore]
     #[test]

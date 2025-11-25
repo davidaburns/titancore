@@ -6,4 +6,6 @@ rust-version.workspace = true
 
 [dependencies]
 core = {path="../../crates/core"}
+hex = "0.4.3"
 num = {version="0.4.3", features=["num-bigint"]}
+sha1 = "0.10.6"
