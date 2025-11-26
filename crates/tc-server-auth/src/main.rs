@@ -1,4 +1,6 @@
 mod handler;
+mod opcode;
+mod packets;
 
 use crate::handler::{AuthServer, ServerState};
 use anyhow::Result;
@@ -7,6 +9,7 @@ use tc_core::{platform::SignalWaiter, server::Server};
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
+    tracing::info!("TitanCore v{}", env!("CARGO_PKG_VERSION"));
 
     let waiter = SignalWaiter::new();
     waiter
