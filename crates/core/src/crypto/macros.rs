@@ -1,5 +1,3 @@
-use crate::crypto::error::InvalidPublicKeyError;
-
 #[macro_export]
 macro_rules! define_key_sized {
     ($name: ident, $size: expr) => {
@@ -28,11 +26,11 @@ macro_rules! define_key_sized {
 
             pub fn from_hex_str_be(hex_str: &str) -> Result<Self, hex::FromHexError> {
                 let mut bytes = hex::decode(hex_str)?;
-                bytes.reverse();
-
                 while bytes.len() < $size {
                     bytes.insert(0, 0x00);
                 }
+
+                bytes.reverse();
 
                 let key = <[u8; $size]>::try_from(bytes).unwrap();
                 Ok(Self { key })
@@ -46,6 +44,21 @@ macro_rules! define_key_sized {
                 let mut key_clone = self.key.clone();
                 key_clone.reverse();
                 key_clone
+            }
+
+            pub fn as_split_slice(&self) -> &[u8] {
+                let mut s = &self.key[..];
+                let mut lead = 0;
+                while s[lead] == 0 {
+                    lead += 1;
+                }
+
+                if lead % 2 != 0 {
+                    lead += 1;
+                }
+
+                s = &s[lead..];
+                s
             }
 
             pub fn to_vec(&self) -> Vec<u8> {
@@ -73,15 +86,6 @@ macro_rules! define_key_sized {
 
             pub fn to_bigint(&self) -> num::bigint::BigInt {
                 num::bigint::BigInt::from_bytes_le(num::bigint::Sign::Plus, &self.key)
-            }
-
-            pub fn try_from_bigint(b: num::bigint::BigInt) -> Result<Self, InvalidPublicKeyError> {
-                let mut key = [0u8; $size];
-
-                let b = b.to_bytes_le().1.to_vec();
-                key[0..b.len()].clone_from_slice(&b);
-
-                Ok(Self::from_bytes_le(&key))
             }
         }
 
@@ -150,6 +154,10 @@ macro_rules! define_byte_value {
 
         #[allow(dead_code)]
         impl $name {
+            pub fn from_value(value: u8) -> Self {
+                Self { 0: value }
+            }
+
             pub fn value(&self) -> u8 {
                 self.0
             }
@@ -163,7 +171,6 @@ macro_rules! define_byte_value {
 
 #[cfg(test)]
 mod test {
-    use crate::crypto::error::InvalidPublicKeyError;
     use crate::{define_byte_value, define_key_constant, define_key_sized};
 
     const TEST_BYTE_VALUE: u8 = 10;
@@ -247,7 +254,4 @@ mod test {
 
         assert_eq!(expected.to_string(), a.to_bigint().to_string());
     }
-
-    #[test]
-    fn test_define_key_sized_from_bigint() {}
 }

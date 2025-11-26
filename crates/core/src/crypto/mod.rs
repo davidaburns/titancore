@@ -2,5 +2,5 @@
 mod macros;
 
 pub mod defines;
-pub mod error;
+pub mod rc4;
 pub mod srp6;
