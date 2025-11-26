@@ -16,7 +16,7 @@ impl ConnectionId {
 
 #[derive(Clone)]
 pub struct ConnectionHandle {
-    id: ConnectionId,
+    _id: ConnectionId,
     sender: mpsc::Sender<Vec<u8>>,
     addr: SocketAddr,
 }
@@ -38,10 +38,14 @@ impl ConnectionRegistry {
         sender: mpsc::Sender<Vec<u8>>,
         addr: SocketAddr,
     ) {
-        self.connections
-            .write()
-            .await
-            .insert(id, ConnectionHandle { id, sender, addr });
+        self.connections.write().await.insert(
+            id,
+            ConnectionHandle {
+                _id: id,
+                sender,
+                addr,
+            },
+        );
     }
 
     pub async fn unregister(&self, id: ConnectionId) {

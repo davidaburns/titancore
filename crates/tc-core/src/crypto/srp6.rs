@@ -1,6 +1,6 @@
 use crate::crypto::defines::{
-    Generator, InterimSessionKey, LargeSafePrime, PasswordVerifier, PrivateKey, ProofKey,
-    PublicKey, ReconnectSeed, Salt, SessionKey, Sha1Hash, XorHash, K,
+    Generator, InterimSessionKey, K, LargeSafePrime, PasswordVerifier, PrivateKey, ProofKey,
+    PublicKey, ReconnectSeed, Salt, SessionKey, Sha1Hash, XorHash,
 };
 use hmac::digest::Update;
 use sha1::{Digest, Sha1};
@@ -238,8 +238,8 @@ fn sha1_interleaved(s_key: InterimSessionKey) -> SessionKey {
 #[cfg(test)]
 mod test {
     use crate::crypto::defines::{
-        Generator, InterimSessionKey, LargeSafePrime, PasswordVerifier, PrivateKey, ProofKey,
-        PublicKey, ReconnectSeed, Salt, SessionKey, Sha1Hash, XorHash, K,
+        Generator, InterimSessionKey, K, LargeSafePrime, PasswordVerifier, PrivateKey, ProofKey,
+        PublicKey, ReconnectSeed, Salt, SessionKey, Sha1Hash, XorHash,
     };
     use crate::crypto::srp6::{
         calculate_client_proof, calculate_client_public_key, calculate_client_s,
@@ -438,7 +438,6 @@ mod test {
         }
     }
 
-    #[ignore]
     #[test]
     fn test_calculate_client_session_key() {
         let tests = include_str!("../../tests/srp6/calculate_client_session_key.txt");

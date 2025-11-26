@@ -1,13 +1,6 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use tc_core::server::{Context, Packet, PacketHandler};
-use thiserror::Error;
-
-#[derive(Error, Debug)]
-pub enum LogonPacketError {
-    #[error("Invalid opcode")]
-    InvalidOpcode,
-}
 
 #[derive(Debug, PartialEq, Eq)]
 #[repr(u8)]
@@ -23,31 +16,31 @@ pub enum LogonOpcode {
     CmdXferAccept = 0x32,
     CmdXferResume = 0x33,
     CmdXferCancel = 0x34,
+    CmdUknownOpcode = 0xFF,
 }
 
-impl TryFrom<u8> for LogonOpcode {
-    type Error = LogonPacketError;
-
-    fn try_from(value: u8) -> std::result::Result<Self, Self::Error> {
+impl From<u8> for LogonOpcode {
+    fn from(value: u8) -> Self {
         match value {
-            0x00 => Ok(LogonOpcode::CmdAuthLogonChallenge),
-            0x01 => Ok(LogonOpcode::CmdAuthLogonProof),
-            0x02 => Ok(LogonOpcode::CmdAuthReconnectChallenge),
-            0x03 => Ok(LogonOpcode::CmdAuthReconnectProof),
-            0x04 => Ok(LogonOpcode::CmdSurveyResult),
-            0x10 => Ok(LogonOpcode::CmdRealmList),
-            0x31 => Ok(LogonOpcode::CmdXferInitiate),
-            0x32 => Ok(LogonOpcode::CmdXferData),
-            0x33 => Ok(LogonOpcode::CmdXferResume),
-            0x34 => Ok(LogonOpcode::CmdXferCancel),
-            _ => Err(LogonPacketError::InvalidOpcode),
+            0x00 => LogonOpcode::CmdAuthLogonChallenge,
+            0x01 => LogonOpcode::CmdAuthLogonProof,
+            0x02 => LogonOpcode::CmdAuthReconnectChallenge,
+            0x03 => LogonOpcode::CmdAuthReconnectProof,
+            0x04 => LogonOpcode::CmdSurveyResult,
+            0x10 => LogonOpcode::CmdRealmList,
+            0x30 => LogonOpcode::CmdXferInitiate,
+            0x31 => LogonOpcode::CmdXferData,
+            0x32 => LogonOpcode::CmdXferAccept,
+            0x33 => LogonOpcode::CmdXferResume,
+            0x34 => LogonOpcode::CmdXferCancel,
+            _ => LogonOpcode::CmdUknownOpcode,
         }
     }
 }
 
 pub struct LogonPacket {
     opcode: LogonOpcode,
-    payload: Vec<u8>,
+    _payload: Vec<u8>,
 }
 
 impl Packet for LogonPacket {
@@ -59,12 +52,20 @@ impl Packet for LogonPacket {
     where
         Self: Sized,
     {
+        if payload.len() == 0 {
+            return Err(anyhow!("packet payload is empty"));
+        }
+
         let op = payload[0];
-        let payload = payload[1..].to_vec();
+        let payload = if payload.len() >= 2 {
+            payload[1..].to_vec()
+        } else {
+            Vec::new()
+        };
 
         Ok(Self {
-            opcode: LogonOpcode::try_from(op)?,
-            payload,
+            opcode: LogonOpcode::from(op),
+            _payload: payload,
         })
     }
 }
@@ -76,22 +77,33 @@ impl ServerState {
     }
 }
 
-pub struct ServerPacketHandler;
+pub struct AuthServer;
 
 #[async_trait]
-impl PacketHandler for ServerPacketHandler {
+impl PacketHandler for AuthServer {
     type Packet = LogonPacket;
     type State = ServerState;
 
     async fn handle(
         &self,
         packet: Self::Packet,
-        state: &Self::State,
-        ctx: &mut Context,
-    ) -> Result<Option<Self::Packet>> {
+        _state: &Self::State,
+        _ctx: &mut Context,
+    ) -> Result<()> {
         match packet.opcode {
-            _ => tracing::info!("Unknown opcode: {:?}", packet.opcode),
+            _ => {
+                let mut output = String::from(format!("Opcode: {:?} Payload: ", packet.opcode));
+                for byte in packet._payload {
+                    output += format!("0x{:02X} ", byte).as_str();
+                }
+
+                tracing::info!("{}", output);
+                if let Err(e) = _ctx.send_bytes(output.as_bytes().to_vec()).await {
+                    tracing::error!("Error sending to client: {e}");
+                }
+            }
         }
-        Ok(None)
+
+        Ok(())
     }
 }

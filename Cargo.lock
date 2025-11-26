@@ -461,6 +461,7 @@ dependencies = [
  "rc4",
  "serde",
  "sha1",
+ "thiserror",
  "tokio",
  "tracing",
 ]

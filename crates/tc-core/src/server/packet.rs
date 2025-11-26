@@ -20,5 +20,5 @@ pub trait PacketHandler: Send + Sync + 'static {
         packet: Self::Packet,
         state: &Self::State,
         ctx: &mut Context,
-    ) -> Result<Option<Self::Packet>>;
+    ) -> Result<()>;
 }
