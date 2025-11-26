@@ -1,10 +1,12 @@
 [package]
-name = "core"
+name = "tc-core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+anyhow = "1.0.100"
+async-trait = "0.1.89"
 bincode = "2.0.1"
 hex = "0.4.3"
 hmac = "0.12.1"

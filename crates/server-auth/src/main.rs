@@ -1,19 +1,24 @@
-use core::platform::SignalWaiter;
-use core::server::run_server;
+mod handler;
+
+use std::sync::Arc;
+
+use tc_core::{platform::SignalWaiter, server::Server};
 use tracing::{error, info};
 
+use crate::handler::{ServerPacketHandler, ServerState};
+
 #[tokio::main(flavor = "multi_thread")]
-async fn main() {
+async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
     let waiter = SignalWaiter::new();
 
     waiter
         .wait(async {
-            if let Err(e) = run_server("0.0.0.0", 8080).await {
-                error!("Error while running the server: {e}");
-            }
+            let server = Server::new(ServerPacketHandler, ServerState::new());
+            server.run("127.0.0.1:8080".parse().unwrap()).await;
         })
         .await;
 
     info!("Cleaning up");
+    Ok(())
 }
