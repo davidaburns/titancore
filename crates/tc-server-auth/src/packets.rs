@@ -22,7 +22,12 @@ impl Packet for LogonPacket {
 
         let op = payload[0];
         let payload = if payload.len() >= 2 {
-            payload[1..].to_vec()
+            payload[1..]
+                .to_vec()
+                .iter()
+                .copied()
+                .filter(|&b| b != 0x0D && b != 0x0A)
+                .collect()
         } else {
             Vec::new()
         };

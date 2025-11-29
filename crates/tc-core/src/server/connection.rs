@@ -14,6 +14,12 @@ impl ConnectionId {
     }
 }
 
+impl std::fmt::Display for ConnectionId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 #[derive(Clone)]
 pub struct ConnectionHandle {
     _id: ConnectionId,

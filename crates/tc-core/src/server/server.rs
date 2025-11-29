@@ -59,8 +59,9 @@ impl<H: PacketHandler> Server<H> {
         let (tx, rx) = mpsc::channel(32);
 
         registry.register(id, tx.clone(), addr).await;
-        tokio::spawn(Self::write_loop(writer, rx));
 
+        tracing::info!("Client connection from: {addr}");
+        tokio::spawn(Self::write_loop(writer, rx));
         let result =
             Self::read_loop(reader, addr, id, handler, state, tx, Arc::clone(&registry)).await;
 
@@ -92,6 +93,7 @@ impl<H: PacketHandler> Server<H> {
             }
         }
 
+        tracing::info!("Client {addr} [{id}] disconnected");
         Ok(())
     }
 
