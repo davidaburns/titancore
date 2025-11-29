@@ -5,4 +5,4 @@ members = ["crates/tc-core","crates/tc-server-auth", "crates/tc-server-world"]
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.90.0"
+rust-version = "1.90.1"
