@@ -1,5 +1,11 @@
 mod cache;
+mod connection;
+mod db;
 mod error;
 mod pool;
+mod transaction;
+pub use connection::*;
+pub use db::*;
 pub use error::*;
 pub use pool::*;
+pub use transaction::*;

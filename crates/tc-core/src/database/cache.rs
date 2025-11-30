@@ -17,9 +17,9 @@ pub struct CacheStats {
 // Represents the hashed value of a sql query to be used
 // as an entry for a cached sql statement hash map
 #[derive(Clone, Eq, PartialEq, Hash)]
-struct StatementKey(u64);
+struct PreparedStatementKey(u64);
 
-impl StatementKey {
+impl PreparedStatementKey {
     fn new(sql: &str) -> Self {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         sql.hash(&mut hasher);
@@ -28,21 +28,21 @@ impl StatementKey {
     }
 }
 
-struct CacheEntry {
+struct PreparedStatementCacheEntry {
     statement: Statement,
     sql: String,
     last_used: Instant,
     use_count: u64,
 }
 
-pub struct StatementCache {
-    entries: HashMap<StatementKey, CacheEntry>,
+pub struct PreparedStatementCache {
+    entries: HashMap<PreparedStatementKey, PreparedStatementCacheEntry>,
     capacity: usize,
     hits: u64,
     misses: u64,
 }
 
-impl StatementCache {
+impl PreparedStatementCache {
     pub fn new(capacity: usize) -> Self {
         Self {
             entries: HashMap::with_capacity(capacity),
@@ -53,7 +53,7 @@ impl StatementCache {
     }
 
     pub fn get(&mut self, sql: &str) -> Option<&Statement> {
-        let key = StatementKey::new(sql);
+        let key = PreparedStatementKey::new(sql);
         if let Some(entry) = self.entries.get_mut(&key) {
             entry.last_used = Instant::now();
             entry.use_count += 1;
@@ -71,10 +71,10 @@ impl StatementCache {
             self.evict_lru();
         }
 
-        let key = StatementKey::new(sql);
+        let key = PreparedStatementKey::new(sql);
         self.entries.insert(
             key,
-            CacheEntry {
+            PreparedStatementCacheEntry {
                 statement,
                 sql: sql.to_string(),
                 last_used: Instant::now(),
