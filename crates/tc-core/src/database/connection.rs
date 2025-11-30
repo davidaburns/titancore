@@ -79,6 +79,10 @@ impl<'a> ConnectionGuard<'a> {
         &self.conn.as_ref().unwrap().client
     }
 
+    pub fn client_mut(&mut self) -> &mut Client {
+        &mut self.conn.as_mut().unwrap().client
+    }
+
     pub fn conn_mut(&mut self) -> &mut PooledConnection {
         self.conn.as_mut().unwrap()
     }

@@ -1,11 +1,11 @@
-use futures::FutureExt;
-use tokio::time::timeout;
-use tokio_postgres::{Row, types::ToSql};
-
 use crate::database::{
     ConnectionPool, ConnectionPoolStats, PoolConfig, Result, SqlError, SqlErrorKind, SqlResultExt,
+    TransactionContext, cache::PreparedStatementCache,
 };
+use futures::FutureExt;
 use std::{panic::AssertUnwindSafe, sync::Arc, time::Duration};
+use tokio::{sync::RwLock, time::timeout};
+use tokio_postgres::{Row, types::ToSql};
 
 pub struct DatabaseHandle {
     pool: Arc<ConnectionPool>,
@@ -81,6 +81,44 @@ impl DatabaseHandle {
                 .map_err(|_| SqlError::new(SqlErrorKind::Timeout, "Query timed out"))?
                 .sql_err(SqlErrorKind::Query)
                 .map_err(|e| e.query(sql))
+        })
+        .await
+    }
+
+    pub async fn transaction<F, T>(&self, f: F) -> Result<T>
+    where
+        F: for<'c> AsyncFnOnce(TransactionContext<'c>) -> Result<T>,
+    {
+        self.with_panic_recovery("TRANSACTION", async {
+            let mut conn = self.pool.acquire().await?;
+            let tx = conn
+                .client_mut()
+                .transaction()
+                .await
+                .sql_err(SqlErrorKind::Transaction)
+                .map_err(|e| e.context("Failed to begin transaction"))?;
+
+            let tx_cache = RwLock::new(PreparedStatementCache::new(
+                self.pool.config.statement_cache_capacity,
+            ));
+
+            let ctx = TransactionContext {
+                tx: &tx,
+                cache: &tx_cache,
+                query_timeout: self.query_timeout,
+            };
+
+            match f(ctx).await {
+                Ok(result) => {
+                    tx.commit()
+                        .await
+                        .sql_err(SqlErrorKind::Transaction)
+                        .map_err(|e| e.context("Failed to commit transaction"))?;
+
+                    Ok(result)
+                }
+                Err(e) => Err(e.context("Transaction rolled back")),
+            }
         })
         .await
     }

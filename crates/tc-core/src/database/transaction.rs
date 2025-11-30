@@ -8,9 +8,9 @@ use crate::database::{
 };
 
 pub struct TransactionContext<'a> {
-    tx: &'a PgTransaction<'a>,
-    cache: &'a RwLock<PreparedStatementCache>,
-    query_timeout: Duration,
+    pub tx: &'a PgTransaction<'a>,
+    pub cache: &'a RwLock<PreparedStatementCache>,
+    pub query_timeout: Duration,
 }
 
 impl<'a> TransactionContext<'a> {

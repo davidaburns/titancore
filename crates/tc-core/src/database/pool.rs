@@ -51,7 +51,7 @@ pub struct ConnectionPoolStats {
 }
 
 pub struct ConnectionPool {
-    config: PoolConfig,
+    pub config: PoolConfig,
     connections: Arc<Mutex<VecDeque<PooledConnection>>>,
     sem: Arc<Semaphore>,
     shutdown: AtomicBool,
