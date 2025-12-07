@@ -56,11 +56,11 @@ impl std::fmt::Display for SqlError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "[{:?}]", self.kind)?;
         if let Some(q) = &self.query {
-            let q = if q.len() > 100 { &q[..100] } else { q };
-            write!(f, " queryy={}", q)?;
+            let q = if q.len() > 10000 { &q[..10000] } else { q };
+            write!(f, " query=\n{}\n", q)?;
         }
 
-        write!(f, " {}", self.source)
+        write!(f, "\n{}", self.source)
     }
 }
 
