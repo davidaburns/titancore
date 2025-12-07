@@ -1,7 +1,10 @@
 [package]
-name = "tool-vmap-extractor"
+name = "vmap-extractor"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+anyhow = "1.0.100"
+tc-core = {path="../tc-core"}
+tokio = {version="1.48.0", features=["full"]}

@@ -1,5 +1,5 @@
 use crate::database::{DatabaseHandle, Result, SqlError, SqlErrorKind};
-use std::{collections::BTreeMap, path::Path};
+use std::{cmp::Ordering, collections::BTreeMap, i64, path::Path};
 use tokio::fs;
 
 #[derive(Debug, Clone)]
@@ -150,6 +150,29 @@ pub struct MigrationReport {
     pub reverted: Vec<i64>,
 }
 
+impl MigrationReport {
+    fn new(initial: i64, target: i64) -> Self {
+        Self {
+            initial_version: initial,
+            target_version: target,
+            final_version: initial,
+            applied: Vec::new(),
+            reverted: Vec::new(),
+        }
+    }
+
+    pub fn is_success(&self) -> bool {
+        self.final_version == self.target_version
+            || (self.target_version == i64::MAX
+                && self.applied.is_empty()
+                && self.reverted.is_empty())
+    }
+
+    pub fn changes(&self) -> usize {
+        self.applied.len() + self.reverted.len()
+    }
+}
+
 #[derive(Debug)]
 pub enum ValidationIssue {
     MissingMigration {
@@ -170,13 +193,13 @@ pub struct MigrationRecord {
     pub applied_at: chrono::DateTime<chrono::Utc>,
 }
 
-pub struct Migrator<'a> {
+pub struct MigrationMigrator<'a> {
     db: &'a DatabaseHandle,
     registry: &'a MigrationRegistry,
     table_name: String,
 }
 
-impl<'a> Migrator<'a> {
+impl<'a> MigrationMigrator<'a> {
     pub fn new(db: &'a DatabaseHandle, registry: &'a MigrationRegistry) -> Self {
         Self {
             db,
@@ -195,7 +218,7 @@ impl<'a> Migrator<'a> {
             r#"
             CREATE TABLE IF NOT EXISTS {} (
                 version BIGINT PRIMARY KEY,
-                name TEXT NOT NULL
+                name TEXT NOT NULL,
                 applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
             "#,
@@ -204,6 +227,18 @@ impl<'a> Migrator<'a> {
 
         self.db.execute(&sql, &[]).await?;
         Ok(())
+    }
+
+    pub async fn initialized(&self) -> Result<bool> {
+        let sql = r#"
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_schema='public' AND table_name=$1
+            )
+        "#;
+
+        let exists: bool = self.db.query_scalar(sql, &[&self.table_name]).await?;
+        Ok(exists)
     }
 
     pub async fn records(&self) -> Result<Vec<MigrationRecord>> {
@@ -240,27 +275,125 @@ impl<'a> Migrator<'a> {
     }
 
     pub async fn migrate_pending(&self) -> Result<MigrationReport> {
-        todo!();
+        self.migrate_to(i64::MAX).await
     }
 
     pub async fn migrate_to(&self, target: i64) -> Result<MigrationReport> {
-        todo!();
+        let current = self.current_version().await?.unwrap_or(0);
+        match target.cmp(&current) {
+            Ordering::Greater | Ordering::Equal => self.migrate_up(current, target).await,
+            Ordering::Less => self.migrate_down(current, target).await,
+        }
     }
 
     async fn migrate_up(&self, current: i64, target: i64) -> Result<MigrationReport> {
-        todo!();
+        let mut report = MigrationReport::new(current, target);
+        let pending: Vec<_> = self
+            .registry
+            .all()
+            .filter(|m| m.version > current && m.version <= target)
+            .collect();
+
+        for migration in pending {
+            self.apply_migration(migration).await?;
+            report.applied.push(migration.version);
+        }
+
+        report.final_version = self.current_version().await?.unwrap_or(0);
+        Ok(report)
     }
 
     async fn migrate_down(&self, current: i64, target: i64) -> Result<MigrationReport> {
-        todo!();
+        let mut report = MigrationReport::new(current, target);
+        let to_revert: Vec<_> = self
+            .registry
+            .all()
+            .filter(|m| m.version <= current && m.version > target)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+
+        for migration in to_revert {
+            self.revert_migration(migration).await?;
+            report.reverted.push(migration.version);
+        }
+
+        report.final_version = self.current_version().await?.unwrap_or(0);
+        Ok(report)
     }
 
     async fn apply_migration(&self, migration: &Migration) -> Result<()> {
-        todo!();
+        tracing::info!(
+            "Applying migration {}: {}",
+            migration.version,
+            migration.name
+        );
+
+        self.db
+            .transaction(async |tx| {
+                let version = migration.version;
+                let name = migration.name.clone();
+                let up_sql = migration.up.clone();
+                let table = self.table_name.clone();
+
+                for stmt in Self::split_statements(&up_sql) {
+                    let stmt = stmt.trim();
+                    if !stmt.is_empty() {
+                        tx.execute(stmt, &[]).await?;
+                    }
+                }
+
+                let migration_record_sql =
+                    format!("INSERT INTO {} (version, name) VALUES ($1, $2);", table);
+
+                tx.execute(&migration_record_sql, &[&version, &name])
+                    .await?;
+
+                Ok(())
+            })
+            .await
+            .map_err(|e| e.context(format!("Migration {} failed", migration.version)))?;
+
+        Ok(())
     }
 
     async fn revert_migration(&self, migration: &Migration) -> Result<()> {
-        todo!();
+        let down_sql = migration.down.as_ref().ok_or_else(|| {
+            SqlError::new(
+                SqlErrorKind::Query,
+                format!("Migration {} has no down script", migration.version),
+            )
+        })?;
+
+        tracing::info!(
+            "Reverting migration {}: {}",
+            migration.version,
+            migration.name
+        );
+
+        self.db
+            .transaction(async |tx| {
+                let version = migration.version;
+                let down_sql = down_sql.clone();
+                let table = self.table_name.clone();
+
+                for stmt in Self::split_statements(&down_sql) {
+                    let stmt = stmt.trim();
+                    if !stmt.is_empty() {
+                        tx.execute(stmt, &[]).await?;
+                    }
+                }
+
+                let migration_revert_sql = format!("DELETE FROM {} WHERE version = $1;", table);
+                tx.execute(&migration_revert_sql, &[&version]).await?;
+
+                Ok(())
+            })
+            .await
+            .map_err(|e| e.context(format!("Revert {} failed", migration.version)))?;
+
+        Ok(())
     }
 
     fn split_statements(sql: &str) -> Vec<&str> {

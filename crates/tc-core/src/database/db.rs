@@ -44,6 +44,33 @@ impl DatabaseHandle {
         .await
     }
 
+    pub async fn query_single(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<Row> {
+        let rows = self.query(sql, params).await?;
+        match rows.len() {
+            0 => Err(
+                SqlError::new(SqlErrorKind::Query, "Expected a single row, got none").query(sql),
+            ),
+            1 => Ok(rows.into_iter().next().unwrap()),
+            n => Err(SqlError::new(
+                SqlErrorKind::Query,
+                format!("Expected a single row, got {}", n),
+            )
+            .query(sql)),
+        }
+    }
+
+    pub async fn query_scalar<T>(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<T>
+    where
+        T: for<'a> tokio_postgres::types::FromSql<'a>,
+    {
+        let row = self.query_single(sql, params).await?;
+        row.try_get(0).map_err(|e| {
+            SqlError::with_source(SqlErrorKind::Query, e)
+                .query(sql)
+                .context("Failed to extract scalar value")
+        })
+    }
+
     pub async fn execute(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<u64> {
         self.with_panic_recovery(sql, async {
             let mut conn = self.pool.acquire().await?;
