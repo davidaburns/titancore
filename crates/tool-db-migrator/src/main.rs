@@ -19,8 +19,8 @@ async fn main() -> anyhow::Result<()> {
             let (conn, dir) = match (args.conn, args.dir) {
                 (Some(conn), Some(dir)) => (conn, dir),
                 _ => {
-                    eprintln!("Error: connection or migration directory not provided");
-                    eprintln!("Usage: --conn <CONN> --dir <DIR> [status | up | to]");
+                    tracing::error!("Error: connection or migration directory not provided");
+                    tracing::error!("Usage: --conn <CONN> --dir <DIR> [status | up | to]");
                     std::process::exit(1);
                 }
             };
@@ -32,8 +32,8 @@ async fn main() -> anyhow::Result<()> {
             let dir = match args.dir {
                 Some(dir) => dir,
                 None => {
-                    eprintln!("Error: migration directory not provided");
-                    eprintln!("Usage: --dir <DIR> new <NAME>");
+                    tracing::error!("Error: migration directory not provided");
+                    tracing::error!("Usage: --dir <DIR> new <NAME>");
                     std::process::exit(1);
                 }
             };
