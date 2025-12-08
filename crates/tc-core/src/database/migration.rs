@@ -32,6 +32,23 @@ impl Migration {
 
         Some((version, name.to_string()))
     }
+
+    pub fn extract_section(content: &String, section: &str) -> Option<String> {
+        let start_marker = format!("--#: {}", section);
+        let end_marker = "--#: end";
+
+        let start_pos = content.find(&start_marker)?;
+        let start_after_marker = start_pos + start_marker.len();
+        let section_start = content[start_after_marker..].find('\n')? + start_after_marker + 1;
+        let section_end = content[section_start..].find(end_marker)? + section_start;
+
+        let results = content[section_start..section_end].trim().to_string();
+        if results.is_empty() {
+            return None;
+        }
+
+        Some(results)
+    }
 }
 
 #[derive(Debug, Default)]
@@ -57,13 +74,11 @@ impl MigrationRegistry {
             migrations: BTreeMap::new(),
         };
 
-        let mut up_files: BTreeMap<i64, (String, String)> = BTreeMap::new();
-        let mut down_files: BTreeMap<i64, String> = BTreeMap::new();
-
+        let mut files: BTreeMap<i64, (String, String)> = BTreeMap::new();
         while let Some(entry) = entries.next_entry().await.map_err(|e| {
             SqlError::new(
                 SqlErrorKind::Query,
-                format!("Failed to read dir entry: {}", e),
+                format!("Failed to read migration dir entry: {}", e),
             )
         })? {
             let path = entry.path();
@@ -79,26 +94,46 @@ impl MigrationRegistry {
             let content = fs::read_to_string(&path).await.map_err(|e| {
                 SqlError::new(
                     SqlErrorKind::Query,
-                    format!("Failed to read sql file: {}", e),
+                    format!("Failed to read migration contents: {}", e),
                 )
             })?;
 
-            if filename.contains(".up.sql") {
-                let base_name = filename.replace(".up.sql", ".sql");
-                if let Some((version, name)) = Migration::parse_filename(&base_name) {
-                    up_files.insert(version, (name, content));
-                }
-            } else if filename.contains(".down.sql") {
-                let base_name = filename.replace(".down.sql", ".sql");
-                if let Some((version, _)) = Migration::parse_filename(&base_name) {
-                    down_files.insert(version, content);
-                }
+            if content.is_empty() {
+                return Err(SqlError::new(
+                    SqlErrorKind::Query,
+                    format!("Migration {}, is empty", filename),
+                ));
+            }
+
+            if let Some((version, name)) = Migration::parse_filename(&filename) {
+                files.insert(version, (name, content));
+            } else {
+                return Err(SqlError::new(
+                    SqlErrorKind::Query,
+                    format!(
+                        "Migration {}, filename is not in correct format <version>_<name>.sql",
+                        filename
+                    ),
+                ));
             }
         }
 
-        for (version, (name, up)) in up_files {
+        for (version, (name, content)) in files {
+            let up = match Migration::extract_section(&content, "migration.up") {
+                Some(up) => up,
+                None => {
+                    return Err(SqlError::new(
+                        SqlErrorKind::Query,
+                        format!(
+                            "Migration {}_{}, has no 'up' migration content",
+                            version, name
+                        ),
+                    ));
+                }
+            };
+
             let mut migration = Migration::new(version, name, up);
-            if let Some(down) = down_files.remove(&version) {
+            if let Some(down) = Migration::extract_section(&content, "migration.down") {
                 migration = migration.with_down(down);
             }
 
@@ -359,12 +394,10 @@ impl<'a> MigrationMigrator<'a> {
     }
 
     async fn revert_migration(&self, migration: &Migration) -> Result<()> {
-        let down_sql = migration.down.as_ref().ok_or_else(|| {
-            SqlError::new(
-                SqlErrorKind::Query,
-                format!("Migration {} has no down script", migration.version),
-            )
-        })?;
+        let down_sql = match migration.down.as_ref() {
+            Some(sql) => sql,
+            None => return Ok(()),
+        };
 
         tracing::info!(
             "Reverting migration {}: {}",

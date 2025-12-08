@@ -7,6 +7,8 @@ use std::{panic::AssertUnwindSafe, sync::Arc, time::Duration};
 use tokio::{sync::RwLock, time::timeout};
 use tokio_postgres::{Row, types::ToSql};
 
+pub type QueryParam = dyn ToSql + Sync;
+
 pub struct DatabaseHandle {
     pool: Arc<ConnectionPool>,
     query_timeout: Duration,
@@ -23,7 +25,7 @@ impl DatabaseHandle {
         })
     }
 
-    pub async fn query(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<Vec<Row>> {
+    pub async fn query(&self, sql: &str, params: &[&QueryParam]) -> Result<Vec<Row>> {
         self.with_panic_recovery(sql, async {
             let mut conn = self.pool.acquire().await?;
             let stmt = conn
@@ -44,7 +46,7 @@ impl DatabaseHandle {
         .await
     }
 
-    pub async fn query_single(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<Row> {
+    pub async fn query_single(&self, sql: &str, params: &[&QueryParam]) -> Result<Row> {
         let rows = self.query(sql, params).await?;
         match rows.len() {
             0 => Err(
@@ -59,7 +61,7 @@ impl DatabaseHandle {
         }
     }
 
-    pub async fn query_scalar<T>(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<T>
+    pub async fn query_scalar<T>(&self, sql: &str, params: &[&QueryParam]) -> Result<T>
     where
         T: for<'a> tokio_postgres::types::FromSql<'a>,
     {
@@ -71,7 +73,7 @@ impl DatabaseHandle {
         })
     }
 
-    pub async fn execute(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<u64> {
+    pub async fn execute(&self, sql: &str, params: &[&QueryParam]) -> Result<u64> {
         self.with_panic_recovery(sql, async {
             let mut conn = self.pool.acquire().await?;
             let stmt = conn
@@ -90,11 +92,7 @@ impl DatabaseHandle {
         .await
     }
 
-    pub async fn query_unprepared(
-        &self,
-        sql: &str,
-        params: &[&(dyn ToSql + Sync)],
-    ) -> Result<Vec<Row>> {
+    pub async fn query_unprepared(&self, sql: &str, params: &[&QueryParam]) -> Result<Vec<Row>> {
         self.with_panic_recovery(sql, async {
             let conn = self.pool.acquire().await?;
             let stmt = timeout(self.query_timeout, conn.client().prepare(sql))

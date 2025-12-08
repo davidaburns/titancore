@@ -1,9 +1,9 @@
 use std::time::Duration;
 use tokio::{sync::RwLock, time::timeout};
-use tokio_postgres::{Row, Statement, Transaction as PgTransaction, types::ToSql};
+use tokio_postgres::{Row, Statement, Transaction as PgTransaction};
 
 use crate::database::{
-    Result, SqlError, SqlErrorKind, SqlResultExt,
+    QueryParam, Result, SqlError, SqlErrorKind, SqlResultExt,
     cache::{CacheStats, PreparedStatementCache},
 };
 
@@ -14,7 +14,7 @@ pub struct TransactionContext<'a> {
 }
 
 impl<'a> TransactionContext<'a> {
-    pub async fn query(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<Vec<Row>> {
+    pub async fn query(&self, sql: &str, params: &[&QueryParam]) -> Result<Vec<Row>> {
         let stmt = self.prepare_cached(sql).await?;
         timeout(self.query_timeout, self.tx.query(&stmt, params))
             .await
@@ -23,7 +23,34 @@ impl<'a> TransactionContext<'a> {
             .map_err(|e| e.query(sql).context("Transaction query failed"))
     }
 
-    pub async fn execute(&self, sql: &str, params: &[&(dyn ToSql + Sync)]) -> Result<u64> {
+    pub async fn query_single(&self, sql: &str, params: &[&QueryParam]) -> Result<Row> {
+        let rows = self.query(sql, params).await?;
+        match rows.len() {
+            0 => Err(
+                SqlError::new(SqlErrorKind::Query, "Expected a single row, got nonw").query(sql),
+            ),
+            1 => Ok(rows.into_iter().next().unwrap()),
+            n => Err(SqlError::new(
+                SqlErrorKind::Query,
+                format!("Expected a single row, got {}", n),
+            )
+            .query(sql)),
+        }
+    }
+
+    pub async fn query_scalar<T>(&self, sql: &str, params: &[&QueryParam]) -> Result<T>
+    where
+        T: for<'r> tokio_postgres::types::FromSql<'r>,
+    {
+        let row = self.query_single(sql, params).await?;
+        row.try_get(0).map_err(|e| {
+            SqlError::with_source(SqlErrorKind::Query, e)
+                .query(sql)
+                .context("Failed to extract scalar value")
+        })
+    }
+
+    pub async fn execute(&self, sql: &str, params: &[&QueryParam]) -> Result<u64> {
         let stmt = self.prepare_cached(sql).await?;
         timeout(self.query_timeout, self.tx.execute(&stmt, params))
             .await

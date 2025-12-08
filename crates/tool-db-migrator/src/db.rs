@@ -31,7 +31,7 @@ pub async fn database_exists(conn: &String, db_name: &String) -> Result<bool> {
     let exists: bool = db
         .query_scalar(
             "SELECT EXISTS(SELECT 1 as exists FROM pg_database WHERE datname=$1);",
-            &[&db_name],
+            &[db_name],
         )
         .await?;
 

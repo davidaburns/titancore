@@ -111,15 +111,14 @@ pub async fn run_new_cmd(name: String, dir: String) -> anyhow::Result<()> {
     builder.create(dir.clone()).await?;
 
     let timestamp = chrono::Utc::now().format("%Y%m%d%H%M%S");
-    let up_filename = format!("{}/{}_{}.up.sql", dir, timestamp, name);
-    let down_filename = format!("{}/{}_{}.down.sql", dir, timestamp, name);
+    let filename = format!("{}/{}_{}.sql", dir, timestamp, name);
+    tokio::fs::write(
+        &filename,
+        "--#: migration.up\n--#: end\n\n--#: migration.down\n--#: end\n",
+    )
+    .await?;
 
-    tokio::fs::write(&up_filename, "-- Add up migration SQL here\n").await?;
-    tokio::fs::write(&down_filename, "-- Add down migration SQL here\n").await?;
-
-    tracing::info!("Created new migration file: {}", up_filename);
-    tracing::info!("Created new migration file: {}", down_filename);
-
+    tracing::info!("Created new migration: {}", filename);
     Ok(())
 }
 
