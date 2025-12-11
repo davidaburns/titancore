@@ -1,4 +1,4 @@
-use crate::crypto::defines::{
+pub use crate::crypto::defines::{
     Generator, InterimSessionKey, K, LargeSafePrime, PasswordVerifier, PrivateKey, ProofKey,
     PublicKey, ReconnectSeed, Salt, SessionKey, Sha1Hash, XorHash,
 };

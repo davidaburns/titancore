@@ -1,3 +1,5 @@
+use rand::{RngCore, rng};
+
 use crate::{define_byte_value, define_key_constant, define_key_sized};
 
 const SESSION_KEY_SIZE: usize = 40;
@@ -35,6 +37,22 @@ define_byte_value!(K, 3);
 define_byte_value!(Generator, 7);
 define_key_sized!(Sha1Hash, SHA_HASH_SIZE);
 define_key_sized!(Salt, SALT_SIZE);
+
+impl Default for Salt {
+    fn default() -> Self {
+        let mut key = [0u8; Self::SIZE];
+        rng().fill_bytes(&mut key);
+
+        Self::from_bytes_le(&key)
+    }
+}
+
+impl Salt {
+    pub fn randomized() -> Self {
+        Self::default()
+    }
+}
+
 define_key_sized!(PasswordVerifier, PASSWORD_VERIFIER_SIZE);
 define_key_sized!(PublicKey, PUBLIC_KEY_SIZE);
 define_key_sized!(PrivateKey, PRIVATE_KEY_SIZE);

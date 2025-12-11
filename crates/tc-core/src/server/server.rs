@@ -47,6 +47,10 @@ impl<H: PacketHandler> Server<H> {
         }
     }
 
+    pub fn connection_registry(&self) -> Arc<ConnectionRegistry> {
+        self.registry.clone()
+    }
+
     async fn handle_connection(
         stream: TcpStream,
         addr: SocketAddr,

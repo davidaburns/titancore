@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
-    "crates/tc-core",
+    "crates/tc-core", "crates/tc-server-api",
     "crates/tc-server-auth",
     "crates/tc-server-world",
     "crates/tool-db-migrator",

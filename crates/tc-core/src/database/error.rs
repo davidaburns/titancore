@@ -77,8 +77,9 @@ pub trait SqlResultExt<T> {
     fn with_query(self, sql: &str) -> Result<T>;
 }
 
-impl<T, E: std::error::Error + Send + Sync + 'static> SqlResultExt<T>
-    for std::result::Result<T, E>
+impl<T, E> SqlResultExt<T> for std::result::Result<T, E>
+where
+    E: std::error::Error + Send + Sync + 'static,
 {
     fn sql_err(self, kind: SqlErrorKind) -> Result<T> {
         self.map_err(|e| SqlError::with_source(kind, e))

@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS account (
     last_attempt_ip VARCHAR(15) NOT NULL DEFAULT '127.0.0.1',
     failed_logins INTEGER NOT NULL DEFAULT 0,
     locked SMALLINT NOT NULL DEFAULT 0,
-    lock_country VARCHAR(1) NOT NULL DEFAULT '00',
+    lock_country VARCHAR(2) NOT NULL DEFAULT '00',
     last_login TIMESTAMPTZ,
     online SMALLINT NOT NULL DEFAULT 0,
     expansion SMALLINT NOT NULL DEFAULT 2,
@@ -2140,4 +2140,23 @@ CREATE TABLE IF NOT EXISTS uptime (
 --#: end
 
 --#: migration.down
+DROP TABLE uptime;
+DROP TABLE secret_digest;
+DROP TABLE realmlist;
+DROP TABLE realmcharacters;
+DROP TABLE rbac_linked_permissions;
+DROP TABLE rbac_default_permissions;
+DROP TABLE rbac_account_permissions;
+DROP TABLE rbac_permissions;
+DROP TABLE logs_ip_actions;
+DROP TABLE logs;
+DROP TABLE ip_banned;
+DROP TABLE build_info;
+DROP TABLE build_executable_hash;
+DROP TABLE build_auth_key;
+DROP TABLE autobroadcast;
+DROP TABLE account_muted;
+DROP TABLE account_banned;
+DROP TABLE account;
+
 --#: end
